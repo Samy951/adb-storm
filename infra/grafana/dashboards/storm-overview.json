@@ -1,0 +1,120 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "storm-overview",
+    "title": "Storm - Overview",
+    "tags": ["storm"],
+    "timezone": "browser",
+    "refresh": "5s",
+    "time": {
+      "from": "now-15m",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Active WebSocket Connections",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "ws_connections_active",
+            "legendFormat": "{{instance}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Total Connections",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+        "targets": [
+          {
+            "expr": "ws_connections_total",
+            "legendFormat": "Total"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Messages Received/s",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+        "targets": [
+          {
+            "expr": "rate(ws_messages_received[1m])",
+            "legendFormat": "msg/s"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Messages Processed/s",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+        "targets": [
+          {
+            "expr": "rate(messages_processed_total[1m])",
+            "legendFormat": "msg/s"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "WebSocket Connections Over Time",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+        "targets": [
+          {
+            "expr": "ws_connections_active",
+            "legendFormat": "{{instance}}"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Message Throughput",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+        "targets": [
+          {
+            "expr": "rate(ws_messages_received[1m])",
+            "legendFormat": "Received/s"
+          },
+          {
+            "expr": "rate(messages_processed_total[1m])",
+            "legendFormat": "Processed/s"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Message Processing Latency (p95)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(message_processing_duration_seconds_bucket[1m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(message_processing_duration_seconds_bucket[1m]))",
+            "legendFormat": "p50"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Online Users",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+        "targets": [
+          {
+            "expr": "users_online_total",
+            "legendFormat": "Online"
+          }
+        ]
+      }
+    ]
+  }
+}

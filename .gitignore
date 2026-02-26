@@ -1,0 +1,27 @@
+# Rust
+gateway/target/
+**/*.rs.bk
+
+# Node/Bun
+node_modules/
+*.log
+.env
+
+# Docker
+.docker/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Grafana
+infra/grafana/data/
+
+# PostgreSQL
+infra/pgdata/
