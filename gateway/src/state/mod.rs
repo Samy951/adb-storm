@@ -56,3 +56,119 @@ impl AppState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::mpsc;
+
+    /// Build a minimal AppState without a real Valkey connection.
+    /// Only the `clients` map and `jwt_secret` are usable.
+    fn test_state() -> AppState {
+        // We need a RedisClient to satisfy the struct, but we won't call any
+        // Valkey methods in these tests. Build one with a dummy config — it
+        // won't be connected, which is fine for client-map tests.
+        let config = RedisConfig::from_url("redis://127.0.0.1:6379").unwrap();
+        let valkey = Builder::from_config(config).build().unwrap();
+        AppState {
+            clients: Arc::new(DashMap::new()),
+            valkey,
+            jwt_secret: "test-secret".to_string(),
+        }
+    }
+
+    #[test]
+    fn send_to_unknown_user_does_not_panic() {
+        let state = test_state();
+        let unknown_id = Uuid::new_v4();
+        // Should silently do nothing
+        state.send_to_client(&unknown_id, "hello");
+    }
+
+    #[test]
+    fn send_to_client_delivers_message() {
+        let state = test_state();
+        let user_id = Uuid::new_v4();
+        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+
+        state.clients.insert(user_id, tx);
+        state.send_to_client(&user_id, "test message");
+
+        let received = rx.try_recv().unwrap();
+        assert_eq!(received, "test message");
+    }
+
+    #[test]
+    fn broadcast_sends_to_all_clients() {
+        let state = test_state();
+
+        let uid1 = Uuid::new_v4();
+        let uid2 = Uuid::new_v4();
+        let uid3 = Uuid::new_v4();
+
+        let (tx1, mut rx1) = mpsc::unbounded_channel::<String>();
+        let (tx2, mut rx2) = mpsc::unbounded_channel::<String>();
+        let (tx3, mut rx3) = mpsc::unbounded_channel::<String>();
+
+        state.clients.insert(uid1, tx1);
+        state.clients.insert(uid2, tx2);
+        state.clients.insert(uid3, tx3);
+
+        state.broadcast("broadcast msg");
+
+        assert_eq!(rx1.try_recv().unwrap(), "broadcast msg");
+        assert_eq!(rx2.try_recv().unwrap(), "broadcast msg");
+        assert_eq!(rx3.try_recv().unwrap(), "broadcast msg");
+    }
+
+    #[test]
+    fn broadcast_to_sends_only_to_specified_users() {
+        let state = test_state();
+
+        let uid1 = Uuid::new_v4();
+        let uid2 = Uuid::new_v4();
+        let uid3 = Uuid::new_v4();
+
+        let (tx1, mut rx1) = mpsc::unbounded_channel::<String>();
+        let (tx2, mut rx2) = mpsc::unbounded_channel::<String>();
+        let (tx3, mut rx3) = mpsc::unbounded_channel::<String>();
+
+        state.clients.insert(uid1, tx1);
+        state.clients.insert(uid2, tx2);
+        state.clients.insert(uid3, tx3);
+
+        // Only send to uid1 and uid3
+        state.broadcast_to(&[uid1, uid3], "targeted msg");
+
+        assert_eq!(rx1.try_recv().unwrap(), "targeted msg");
+        assert!(rx2.try_recv().is_err()); // uid2 should not receive
+        assert_eq!(rx3.try_recv().unwrap(), "targeted msg");
+    }
+
+    #[test]
+    fn broadcast_to_with_unknown_ids_does_not_panic() {
+        let state = test_state();
+        let unknown = Uuid::new_v4();
+        state.broadcast_to(&[unknown], "msg");
+        // No panic = success
+    }
+
+    #[test]
+    fn broadcast_to_empty_list_does_nothing() {
+        let state = test_state();
+        state.broadcast_to(&[], "msg");
+    }
+
+    #[test]
+    fn send_to_client_with_dropped_receiver_does_not_panic() {
+        let state = test_state();
+        let user_id = Uuid::new_v4();
+        let (tx, rx) = mpsc::unbounded_channel::<String>();
+
+        state.clients.insert(user_id, tx);
+        drop(rx); // simulate disconnected client
+
+        // Should not panic even though receiver is gone
+        state.send_to_client(&user_id, "message after disconnect");
+    }
+}
