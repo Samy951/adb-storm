@@ -3,7 +3,7 @@ mod state;
 mod valkey;
 mod ws;
 
-use axum::{Router, routing::get};
+use axum::{routing::get, Router};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use std::net::SocketAddr;
 use std::sync::Arc;
