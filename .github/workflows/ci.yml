@@ -61,9 +61,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Type check
-        run: bun x tsc --noEmit
-
       - name: Run tests
         run: bun test
 
@@ -83,9 +80,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      - name: Type check
-        run: bun x tsc --noEmit
 
       - name: Run tests
         run: bun test

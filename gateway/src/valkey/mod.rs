@@ -7,6 +7,7 @@ use crate::ws::messages::ServerMessage;
 
 /// Message payload stored in Valkey Streams.
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct StreamMessage {
     pub user_id: String,
     pub channel_id: String,
@@ -55,15 +56,19 @@ pub async fn publish_typing(
 
 /// Background task: subscribe to Valkey Pub/Sub and broadcast events to connected clients.
 pub async fn pubsub_listener(state: AppState) {
-    let config =
-        RedisConfig::from_url(&std::env::var("VALKEY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()))
-            .expect("Invalid Valkey URL");
+    let config = RedisConfig::from_url(
+        &std::env::var("VALKEY_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
+    )
+    .expect("Invalid Valkey URL");
 
     let subscriber = Builder::from_config(config)
         .build()
         .expect("Failed to build subscriber client");
 
-    subscriber.init().await.expect("Failed to connect subscriber");
+    subscriber
+        .init()
+        .await
+        .expect("Failed to connect subscriber");
 
     // Subscribe to message broadcast channel
     let mut message_rx = subscriber.message_rx();
@@ -93,7 +98,9 @@ pub async fn pubsub_listener(state: AppState) {
                 let channel_id = typing["channel_id"].as_str().unwrap_or_default();
                 let user_id_str = typing["user_id"].as_str().unwrap_or_default();
 
-                if let (Ok(cid), Ok(uid)) = (channel_id.parse::<Uuid>(), user_id_str.parse::<Uuid>()) {
+                if let (Ok(cid), Ok(uid)) =
+                    (channel_id.parse::<Uuid>(), user_id_str.parse::<Uuid>())
+                {
                     let msg = serde_json::to_string(&ServerMessage::UserTyping {
                         channel_id: cid,
                         user_id: uid,
@@ -102,7 +109,8 @@ pub async fn pubsub_listener(state: AppState) {
 
                     // Get online members from Valkey set (maintained by presence-service)
                     let key = format!("channel:online:{}", cid);
-                    let members: Vec<String> = state.valkey.smembers(&key).await.unwrap_or_default();
+                    let members: Vec<String> =
+                        state.valkey.smembers(&key).await.unwrap_or_default();
                     let member_uuids: Vec<Uuid> = members
                         .iter()
                         .filter_map(|m| m.parse::<Uuid>().ok())

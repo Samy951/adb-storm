@@ -1,5 +1,8 @@
 use axum::{
-    extract::{Query, State, WebSocketUpgrade, ws::{Message, WebSocket}},
+    extract::{
+        ws::{Message, WebSocket},
+        Query, State, WebSocketUpgrade,
+    },
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -54,7 +57,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
     // Task: forward messages from channel to WebSocket
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-            if ws_sender.send(Message::Text(msg.into())).await.is_err() {
+            if ws_sender.send(Message::Text(msg)).await.is_err() {
                 break;
             }
         }
@@ -94,7 +97,10 @@ async fn handle_client_message(state: &AppState, user_id: &Uuid, raw: &str) {
     };
 
     match msg {
-        ClientMessage::SendMessage { channel_id, content } => {
+        ClientMessage::SendMessage {
+            channel_id,
+            content,
+        } => {
             // Publish to Valkey Streams for processing by message-service
             if let Err(e) = valkey::publish_message(state, user_id, &channel_id, &content).await {
                 tracing::error!("Failed to publish message: {}", e);

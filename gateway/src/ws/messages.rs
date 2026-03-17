@@ -6,14 +6,9 @@ use uuid::Uuid;
 #[serde(tag = "type")]
 pub enum ClientMessage {
     #[serde(rename = "send_message")]
-    SendMessage {
-        channel_id: Uuid,
-        content: String,
-    },
+    SendMessage { channel_id: Uuid, content: String },
     #[serde(rename = "typing")]
-    Typing {
-        channel_id: Uuid,
-    },
+    Typing { channel_id: Uuid },
     #[serde(rename = "ping")]
     Ping,
 }
@@ -21,6 +16,7 @@ pub enum ClientMessage {
 /// Outgoing message to a WebSocket client.
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
+#[allow(dead_code)]
 pub enum ServerMessage {
     #[serde(rename = "new_message")]
     NewMessage {
@@ -31,16 +27,11 @@ pub enum ServerMessage {
         created_at: String,
     },
     #[serde(rename = "user_typing")]
-    UserTyping {
-        channel_id: Uuid,
-        user_id: Uuid,
-    },
+    UserTyping { channel_id: Uuid, user_id: Uuid },
     #[serde(rename = "pong")]
     Pong,
     #[serde(rename = "error")]
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 #[cfg(test)]
@@ -54,8 +45,14 @@ mod tests {
         let json = r#"{"type":"send_message","channel_id":"550e8400-e29b-41d4-a716-446655440000","content":"hello world"}"#;
         let msg: ClientMessage = serde_json::from_str(json).unwrap();
         match msg {
-            ClientMessage::SendMessage { channel_id, content } => {
-                assert_eq!(channel_id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+            ClientMessage::SendMessage {
+                channel_id,
+                content,
+            } => {
+                assert_eq!(
+                    channel_id.to_string(),
+                    "550e8400-e29b-41d4-a716-446655440000"
+                );
                 assert_eq!(content, "hello world");
             }
             _ => panic!("Expected SendMessage variant"),
@@ -68,7 +65,10 @@ mod tests {
         let msg: ClientMessage = serde_json::from_str(json).unwrap();
         match msg {
             ClientMessage::Typing { channel_id } => {
-                assert_eq!(channel_id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+                assert_eq!(
+                    channel_id.to_string(),
+                    "550e8400-e29b-41d4-a716-446655440000"
+                );
             }
             _ => panic!("Expected Typing variant"),
         }
