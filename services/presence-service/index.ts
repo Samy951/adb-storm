@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { swagger } from "@elysiajs/swagger";
 import Redis from "ioredis";
 import { Registry, collectDefaultMetrics, Gauge } from "prom-client";
 import { authMiddleware } from "./src/middleware/auth";
@@ -15,6 +16,11 @@ const register = new Registry();
 collectDefaultMetrics({ register });
 
 const app = new Elysia()
+  .use(swagger({
+    documentation: {
+      info: { title: "STORM Presence Service", version: "1.0.0", description: "User presence and online status API" },
+    },
+  }))
   .get("/health", () => "OK")
   .get("/metrics", async () => {
     return new Response(await register.metrics(), {

@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { swagger } from "@elysiajs/swagger";
 import { createValkeyClient, startStreamConsumer } from "./src/valkey";
 import { createDb } from "./src/db";
 import { authMiddleware } from "./src/middleware/auth";
@@ -18,6 +19,17 @@ async function main() {
   startStreamConsumer(valkey, db);
 
   const app = new Elysia()
+    .use(swagger({
+      documentation: {
+        info: { title: "STORM Message Service", version: "1.0.0", description: "Message and channel management API" },
+        tags: [
+          { name: "auth", description: "Authentication endpoints" },
+          { name: "channels", description: "Channel management" },
+          { name: "messages", description: "Message retrieval" },
+          { name: "members", description: "Channel membership" },
+        ],
+      },
+    }))
     .decorate("db", db)
     .decorate("valkey", valkey)
     .get("/health", () => "OK")
