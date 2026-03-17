@@ -1,0 +1,11 @@
+{
+  "name": "e2e-tests",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.3",
+    "@types/jsonwebtoken": "^9.0.10"
+  }
+}

@@ -1,0 +1,29 @@
+services:
+  valkey-test:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6399:6379"
+    command: valkey-server --appendonly no --maxmemory 64mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 5
+
+  postgres-test:
+    image: postgres:16-alpine
+    ports:
+      - "5499:5432"
+    environment:
+      POSTGRES_DB: storm_test
+      POSTGRES_USER: storm
+      POSTGRES_PASSWORD: storm_test
+    volumes:
+      - ../migrations:/docker-entrypoint-initdb.d
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storm -d storm_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 5
