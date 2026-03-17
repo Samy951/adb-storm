@@ -20,6 +20,11 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# Claude / AI tooling
+CLAUDE.md
+docs/superpowers/
+*.pdf
+
 # Grafana
 infra/grafana/data/
 
