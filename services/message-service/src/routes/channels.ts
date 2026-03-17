@@ -1,20 +1,22 @@
 import { Elysia, t } from "elysia";
 
 export const channelRoutes = new Elysia({ prefix: "/channels" })
-  // List all channels
-  .get("/", async ({ db }) => {
+  // List channels (public + channels user is member of)
+  .get("/", async ({ db, userId }) => {
     const channels = await db`
       SELECT id, name, description, is_private, created_by, created_at
       FROM channels
+      WHERE is_private = false
+         OR id IN (SELECT channel_id FROM channel_members WHERE user_id = ${userId})
       ORDER BY created_at ASC
     `;
     return { channels };
-  })
+  }, { auth: true })
 
   // Get a single channel
   .get(
     "/:id",
-    async ({ params, db, set }) => {
+    async ({ params, db, userId, set }) => {
       const [channel] = await db`
         SELECT id, name, description, is_private, created_by, created_at
         FROM channels
@@ -24,21 +26,34 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
         set.status = 404;
         return { error: "Channel not found" };
       }
+      if (channel.is_private) {
+        const [member] = await db`
+          SELECT 1 FROM channel_members
+          WHERE channel_id = ${params.id} AND user_id = ${userId}
+        `;
+        if (!member) {
+          set.status = 403;
+          return { error: "Access denied" };
+        }
+      }
       return channel;
     },
-    {
-      params: t.Object({ id: t.String() }),
-    }
+    { params: t.Object({ id: t.String() }), auth: true }
   )
 
   // Create a channel
   .post(
     "/",
-    async ({ body, db }) => {
+    async ({ body, db, userId }) => {
       const [channel] = await db`
         INSERT INTO channels (name, description, is_private, created_by)
-        VALUES (${body.name}, ${body.description || ""}, ${body.is_private || false}, ${body.created_by})
+        VALUES (${body.name}, ${body.description || ""}, ${body.is_private || false}, ${userId})
         RETURNING id, name, description, is_private, created_by, created_at
+      `;
+      // Auto-add creator as admin member
+      await db`
+        INSERT INTO channel_members (channel_id, user_id, role)
+        VALUES (${channel.id}, ${userId}, 'admin')
       `;
       return channel;
     },
@@ -47,26 +62,28 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
         name: t.String(),
         description: t.Optional(t.String()),
         is_private: t.Optional(t.Boolean()),
-        created_by: t.String(),
       }),
+      auth: true,
     }
   )
 
-  // Delete a channel
+  // Delete a channel (only creator)
   .delete(
     "/:id",
-    async ({ params, db, set }) => {
-      const result = await db`
-        DELETE FROM channels WHERE id = ${params.id}
-        RETURNING id
+    async ({ params, db, userId, set }) => {
+      const [channel] = await db`
+        SELECT created_by FROM channels WHERE id = ${params.id}
       `;
-      if (result.length === 0) {
+      if (!channel) {
         set.status = 404;
         return { error: "Channel not found" };
       }
+      if (channel.created_by !== userId) {
+        set.status = 403;
+        return { error: "Only the channel creator can delete it" };
+      }
+      await db`DELETE FROM channels WHERE id = ${params.id}`;
       return { deleted: true };
     },
-    {
-      params: t.Object({ id: t.String() }),
-    }
+    { params: t.Object({ id: t.String() }), auth: true }
   );

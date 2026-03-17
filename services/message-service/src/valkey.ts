@@ -25,9 +25,6 @@ export function startStreamConsumer(valkey: Redis, db: Db) {
   async function consume() {
     while (true) {
       try {
-        // Listen on all message streams with pattern
-        // In practice, we need to know which channels exist.
-        // For now, we'll use a single global stream.
         const results = await valkey.xreadgroup(
           "GROUP",
           STREAM_GROUP,
@@ -46,9 +43,21 @@ export function startStreamConsumer(valkey: Redis, db: Db) {
         for (const [_stream, entries] of results) {
           for (const [id, fields] of entries) {
             const data = parseStreamFields(fields);
-            if (!data) continue;
+            if (!data) {
+              // Invalid message — ACK and skip
+              await valkey.xack("stream:messages", STREAM_GROUP, id);
+              continue;
+            }
 
             try {
+              // Idempotency: skip if already processed
+              const dedupKey = `dedup:${id}`;
+              const isNew = await valkey.set(dedupKey, "1", "EX", 300, "NX");
+              if (!isNew) {
+                await valkey.xack("stream:messages", STREAM_GROUP, id);
+                continue;
+              }
+
               // Persist to PostgreSQL
               const [message] = await db`
                 INSERT INTO messages (channel_id, user_id, content)
@@ -72,7 +81,8 @@ export function startStreamConsumer(valkey: Redis, db: Db) {
               // ACK the message
               await valkey.xack("stream:messages", STREAM_GROUP, id);
             } catch (err) {
-              console.error("Failed to process message:", err);
+              console.error(`Failed to process message ${id}:`, err);
+              // Don't ACK — will be retried on next XREADGROUP with pending entries
             }
           }
         }
@@ -86,7 +96,7 @@ export function startStreamConsumer(valkey: Redis, db: Db) {
   consume();
 }
 
-function parseStreamFields(
+export function parseStreamFields(
   fields: string[]
 ): { user_id: string; channel_id: string; content: string } | null {
   const map: Record<string, string> = {};
@@ -94,6 +104,7 @@ function parseStreamFields(
     map[fields[i]] = fields[i + 1];
   }
   if (!map.user_id || !map.channel_id || !map.content) return null;
+  if (map.content.trim() === "") return null;
   return {
     user_id: map.user_id,
     channel_id: map.channel_id,
