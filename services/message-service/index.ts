@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { createValkeyClient, startStreamConsumer } from "./src/valkey";
 import { createDb } from "./src/db";
 import { authMiddleware } from "./src/middleware/auth";
+import { authRoutes } from "./src/routes/auth";
 import { messageRoutes } from "./src/routes/messages";
 import { channelRoutes } from "./src/routes/channels";
 import { memberRoutes } from "./src/routes/members";
@@ -21,6 +22,7 @@ async function main() {
     .decorate("valkey", valkey)
     .get("/health", () => "OK")
     .use(metricsRoute)
+    .use(authRoutes)
     .use(authMiddleware(JWT_SECRET))
     .use(channelRoutes)
     .use(messageRoutes)

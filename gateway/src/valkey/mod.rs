@@ -88,7 +88,7 @@ pub async fn pubsub_listener(state: AppState) {
             // Message broadcast: forward to all connected clients
             state.broadcast(&payload);
         } else if channel.starts_with("typing:") {
-            // Typing indicator: parse and forward
+            // Typing indicator: forward only to online channel members
             if let Ok(typing) = serde_json::from_str::<serde_json::Value>(&payload) {
                 let channel_id = typing["channel_id"].as_str().unwrap_or_default();
                 let user_id_str = typing["user_id"].as_str().unwrap_or_default();
@@ -99,8 +99,16 @@ pub async fn pubsub_listener(state: AppState) {
                         user_id: uid,
                     })
                     .unwrap();
-                    // Broadcast typing to all (in production: only to channel members)
-                    state.broadcast(&msg);
+
+                    // Get online members from Valkey set (maintained by presence-service)
+                    let key = format!("channel:online:{}", cid);
+                    let members: Vec<String> = state.valkey.smembers(&key).await.unwrap_or_default();
+                    let member_uuids: Vec<Uuid> = members
+                        .iter()
+                        .filter_map(|m| m.parse::<Uuid>().ok())
+                        .filter(|id| *id != uid) // don't send typing to the typer
+                        .collect();
+                    state.broadcast_to(&member_uuids, &msg);
                 }
             }
         }
