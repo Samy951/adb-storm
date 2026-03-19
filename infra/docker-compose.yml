@@ -5,7 +5,11 @@ services:
       - "6379:6379"
     volumes:
       - valkey-data:/data
-    command: valkey-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: >
+      sh -c "apk add --no-cache iproute2 > /dev/null 2>&1;
+             valkey-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru"
+    cap_add:
+      - NET_ADMIN
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s

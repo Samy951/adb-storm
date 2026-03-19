@@ -146,3 +146,64 @@ jobs:
           push: false
           cache-from: type=gha,scope=presence-service
           cache-to: type=gha,mode=max,scope=presence-service
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [test-message-service, test-presence-service]
+    services:
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports:
+          - 6399:6379
+        options: --health-cmd "valkey-cli ping" --health-interval 5s --health-timeout 3s --health-retries 5
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5499:5432
+        env:
+          POSTGRES_DB: storm_test
+          POSTGRES_USER: storm
+          POSTGRES_PASSWORD: storm_test
+        options: --health-cmd "pg_isready -U storm -d storm_test" --health-interval 5s --health-timeout 3s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Init database
+        run: PGPASSWORD=storm_test psql -h localhost -p 5499 -U storm -d storm_test -f migrations/001_initial_schema.sql
+
+      - name: Install and start message-service
+        run: |
+          cd services/message-service && bun install --frozen-lockfile
+          DATABASE_URL="postgres://storm:storm_test@localhost:5499/storm_test" \
+          VALKEY_URL="redis://localhost:6399" \
+          JWT_SECRET="test-e2e-secret" \
+          PORT=4011 \
+            bun run index.ts &
+          sleep 3
+          curl -sf http://localhost:4011/health
+
+      - name: Install and start presence-service
+        run: |
+          cd services/presence-service && bun install --frozen-lockfile
+          VALKEY_URL="redis://localhost:6399" \
+          JWT_SECRET="test-e2e-secret" \
+          PORT=4012 \
+            bun run index.ts &
+          sleep 3
+          curl -sf http://localhost:4012/health
+
+      - name: Install e2e dependencies
+        run: cd tests/e2e && bun install
+
+      - name: Run e2e tests
+        env:
+          E2E_MESSAGE_URL: http://localhost:4011
+          E2E_PRESENCE_URL: http://localhost:4012
+          E2E_JWT_SECRET: test-e2e-secret
+        run: cd tests/e2e && bun test --timeout 10000
