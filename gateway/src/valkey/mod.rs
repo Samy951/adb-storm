@@ -90,20 +90,11 @@ pub async fn pubsub_listener(state: AppState) {
         let payload = message.value.convert::<String>().unwrap_or_default();
 
         if channel.starts_with("broadcast:") {
-            // Message broadcast: forward to online channel members only
-            let channel_id = channel.strip_prefix("broadcast:").unwrap_or_default();
-            let key = format!("channel:online:{}", channel_id);
-            let members: Vec<String> = state.valkey.smembers(&key).await.unwrap_or_default();
-            if members.is_empty() {
-                // Fallback: if no presence data, broadcast to all
-                state.broadcast(&payload);
-            } else {
-                let member_uuids: Vec<Uuid> = members
-                    .iter()
-                    .filter_map(|m| m.parse::<Uuid>().ok())
-                    .collect();
-                state.broadcast_to(&member_uuids, &payload);
-            }
+            // Message broadcast: forward to all clients connected to THIS node.
+            // Each gateway node only holds its own WebSocket connections.
+            // Client-side filtering by channel is handled by the frontend.
+            // This avoids a SMEMBERS round-trip to Valkey for every message.
+            state.broadcast(&payload);
         } else if channel.starts_with("typing:") {
             // Typing indicator: forward only to online channel members
             if let Ok(typing) = serde_json::from_str::<serde_json::Value>(&payload) {
@@ -119,16 +110,12 @@ pub async fn pubsub_listener(state: AppState) {
                     })
                     .unwrap();
 
-                    // Get online members from Valkey set (maintained by presence-service)
-                    let key = format!("channel:online:{}", cid);
-                    let members: Vec<String> =
-                        state.valkey.smembers(&key).await.unwrap_or_default();
-                    let member_uuids: Vec<Uuid> = members
-                        .iter()
-                        .filter_map(|m| m.parse::<Uuid>().ok())
-                        .filter(|id| *id != uid) // don't send typing to the typer
-                        .collect();
-                    state.broadcast_to(&member_uuids, &msg);
+                    // Broadcast to all local clients (except the typer)
+                    for entry in state.clients.iter() {
+                        if *entry.key() != uid {
+                            let _ = entry.value().send(msg.clone());
+                        }
+                    }
                 }
             }
         }
