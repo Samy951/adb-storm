@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: storm-ingress
+  namespace: storm
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/websocket-services: "gateway"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 3001
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: message-service
+                port:
+                  number: 4001
+          - path: /channels
+            pathType: Prefix
+            backend:
+              service:
+                name: message-service
+                port:
+                  number: 4001
+          - path: /presence
+            pathType: Prefix
+            backend:
+              service:
+                name: presence-service
+                port:
+                  number: 4002
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 3001
