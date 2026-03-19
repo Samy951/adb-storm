@@ -207,3 +207,51 @@ jobs:
           E2E_PRESENCE_URL: http://localhost:4012
           E2E_JWT_SECRET: test-e2e-secret
         run: cd tests/e2e && bun test --timeout 10000
+
+  deploy:
+    name: Deploy to AKS
+    runs-on: ubuntu-latest
+    needs: [test-gateway, test-message-service, test-presence-service, e2e-tests, docker-build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Build and push gateway
+        run: az acr build --registry ${{ secrets.ACR_NAME }} --image gateway:${{ github.sha }} --image gateway:latest --platform linux/amd64 ./gateway
+
+      - name: Build and push message-service
+        run: az acr build --registry ${{ secrets.ACR_NAME }} --image message-service:${{ github.sha }} --image message-service:latest --platform linux/amd64 ./services/message-service
+
+      - name: Build and push presence-service
+        run: az acr build --registry ${{ secrets.ACR_NAME }} --image presence-service:${{ github.sha }} --image presence-service:latest --platform linux/amd64 ./services/presence-service
+
+      - name: Set AKS context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+
+      - name: Deploy to AKS
+        run: |
+          kubectl set image deployment/gateway gateway=${{ secrets.ACR_NAME }}.azurecr.io/gateway:${{ github.sha }} -n storm
+          kubectl set image deployment/message-service message-service=${{ secrets.ACR_NAME }}.azurecr.io/message-service:${{ github.sha }} -n storm
+          kubectl set image deployment/presence-service presence-service=${{ secrets.ACR_NAME }}.azurecr.io/presence-service:${{ github.sha }} -n storm
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/gateway -n storm --timeout=120s
+          kubectl rollout status deployment/message-service -n storm --timeout=120s
+          kubectl rollout status deployment/presence-service -n storm --timeout=120s
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n storm
+          echo "Deployed commit ${{ github.sha }} to AKS"
