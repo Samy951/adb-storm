@@ -1,16 +1,10 @@
-mod auth;
-mod state;
-mod valkey;
-mod ws;
-
-use axum::{routing::get, Router};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
 use tracing_subscriber::EnvFilter;
 
-use crate::state::AppState;
+use storm_gateway::state::AppState;
+use storm_gateway::{build_router, valkey};
 
 #[tokio::main]
 async fn main() {
@@ -43,18 +37,14 @@ async fn main() {
     });
 
     let metrics_handle = prometheus_handle.clone();
-    let app = Router::new()
-        .route("/ws", get(ws::handler::ws_upgrade))
-        .route("/health", get(|| async { "OK" }))
-        .route(
-            "/metrics",
-            get(move || {
-                let h = metrics_handle.clone();
-                async move { h.render() }
-            }),
-        )
-        .layer(CorsLayer::permissive())
-        .with_state(state);
+    let mut app = build_router(state);
+    app = app.route(
+        "/metrics",
+        axum::routing::get(move || {
+            let h = metrics_handle.clone();
+            async move { h.render() }
+        }),
+    );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("Gateway listening on {}", addr);
