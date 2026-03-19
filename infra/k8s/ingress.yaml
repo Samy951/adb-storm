@@ -58,6 +58,14 @@ spec:
                 name: presence-service
                 port:
                   number: 4002
+          # Grafana
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000
           # Message service: channels + messages (catch-all)
           - path: /channels
             pathType: Prefix
