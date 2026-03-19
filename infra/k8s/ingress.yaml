@@ -9,6 +9,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
     nginx.ingress.kubernetes.io/websocket-services: "gateway"
     nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+    nginx.ingress.kubernetes.io/use-regex: "true"
 spec:
   ingressClassName: nginx
   rules:
@@ -21,6 +22,13 @@ spec:
                 name: gateway
                 port:
                   number: 3001
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 3001
           - path: /auth
             pathType: Prefix
             backend:
@@ -28,7 +36,7 @@ spec:
                 name: message-service
                 port:
                   number: 4001
-          - path: /channels
+          - path: /swagger
             pathType: Prefix
             backend:
               service:
@@ -42,10 +50,19 @@ spec:
                 name: presence-service
                 port:
                   number: 4002
-          - path: /health
-            pathType: Exact
+          # Presence: online users per channel (must be before /channels catch-all)
+          - path: /channels/[^/]+/online
+            pathType: ImplementationSpecific
             backend:
               service:
-                name: gateway
+                name: presence-service
                 port:
-                  number: 3001
+                  number: 4002
+          # Message service: channels + messages (catch-all)
+          - path: /channels
+            pathType: Prefix
+            backend:
+              service:
+                name: message-service
+                port:
+                  number: 4001
