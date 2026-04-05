@@ -28,18 +28,20 @@ export const messageRoutes = new Elysia({ prefix: "/channels" }).get(
     let messages;
     if (before) {
       messages = await db`
-        SELECT id, channel_id, user_id, content, created_at
-        FROM messages
-        WHERE channel_id = ${params.id} AND created_at < ${before}
-        ORDER BY created_at DESC
+        SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at, u.username
+        FROM messages m
+        JOIN users u ON u.id = m.user_id
+        WHERE m.channel_id = ${params.id} AND m.created_at < ${before}
+        ORDER BY m.created_at DESC
         LIMIT ${limit}
       `;
     } else {
       messages = await db`
-        SELECT id, channel_id, user_id, content, created_at
-        FROM messages
-        WHERE channel_id = ${params.id}
-        ORDER BY created_at DESC
+        SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at, u.username
+        FROM messages m
+        JOIN users u ON u.id = m.user_id
+        WHERE m.channel_id = ${params.id}
+        ORDER BY m.created_at DESC
         LIMIT ${limit}
       `;
     }

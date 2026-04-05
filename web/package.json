@@ -1,0 +1,9 @@
+{
+  "name": "sovereign-messenger",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "bun build ts/main.ts --outdir dist/ --minify",
+    "dev": "bun run dev-server.ts"
+  }
+}
