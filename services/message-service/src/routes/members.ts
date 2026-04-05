@@ -1,6 +1,31 @@
 import { Elysia, t } from "elysia";
 
 export const memberRoutes = new Elysia({ prefix: "/channels" })
+  // Self-join a public channel
+  .post(
+    "/:id/join",
+    async ({ params, db, userId, set }) => {
+      const [channel] = await db`
+        SELECT id, is_private FROM channels WHERE id = ${params.id}
+      `;
+      if (!channel) {
+        set.status = 404;
+        return { error: "Channel not found" };
+      }
+      if (channel.is_private) {
+        set.status = 403;
+        return { error: "Cannot self-join a private channel" };
+      }
+      await db`
+        INSERT INTO channel_members (channel_id, user_id, role)
+        VALUES (${params.id}, ${userId}, 'member')
+        ON CONFLICT (channel_id, user_id) DO NOTHING
+      `;
+      return { ok: true };
+    },
+    { params: t.Object({ id: t.String() }), auth: true }
+  )
+
   // List members of a channel
   .get(
     "/:id/members",

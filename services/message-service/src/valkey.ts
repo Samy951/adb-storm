@@ -58,6 +58,13 @@ export function startStreamConsumer(valkey: Redis, db: Db) {
         RETURNING id, channel_id, user_id, content, created_at
       `;
 
+      // Resolve usernames for broadcast
+      const uniqueUserIds = [...new Set(messages.map((m: any) => m.user_id))];
+      const users = await db`
+        SELECT id, username FROM users WHERE id = ANY(${db.array(uniqueUserIds)}::uuid[])
+      `;
+      const usernameMap = new Map(users.map((u: any) => [u.id, u.username]));
+
       // Broadcast each message via Pub/Sub
       const publishPromises = messages.map((message: any) =>
         publisher.publish(
@@ -67,6 +74,7 @@ export function startStreamConsumer(valkey: Redis, db: Db) {
             id: message.id,
             channel_id: message.channel_id,
             user_id: message.user_id,
+            username: usernameMap.get(message.user_id) || "Anonymous",
             content: message.content,
             created_at: message.created_at,
           })
