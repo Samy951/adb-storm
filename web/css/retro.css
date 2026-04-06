@@ -187,6 +187,7 @@ html, body {
   box-shadow: inset 1px 1px 0 var(--gray-dark), inset -1px -1px 0 var(--white);
   cursor: pointer;
 }
+
 .win-radio input[type="radio"]:checked {
   background: var(--blue-accent);
   box-shadow: inset 1px 1px 0 var(--gray-dark), inset -1px -1px 0 var(--white);
