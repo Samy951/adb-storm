@@ -1,0 +1,24 @@
+<main class="auth-page">
+    <div class="auth-card">
+        <h2>
+            {{mode === "login" ? "Login" : "Create Account"}}
+        </h2>
+        
+        <p class="subtitle">
+            {{
+              mode === 'login'
+                ? 'Welcome back! Please enter your credentials.'
+                : 'Create your account to get started.'
+            }}
+        </p>
+
+        <app-auth-form [mode] = "mode"></app-auth-form>
+
+        <p class="switch">
+            {{mode === "login" ? "Don't have an account ?" : " Already have an account ?"}}
+            <button type="button" (click)="switchMode()">
+                {{mode === "login" ? "Register" : "Login"}}
+            </button>
+        </p>
+    </div>
+</main>

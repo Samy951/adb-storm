@@ -1,0 +1,25 @@
+footer {
+    padding: 30px;
+    text-align: center;
+    background: #111;
+    color: white;
+  
+    p {
+      margin: 0;
+      font-size: 14px;
+    }
+  
+    .links {
+      margin-top: 10px;
+  
+      a {
+        color: #ccc;
+        margin: 0 10px;
+        text-decoration: none;
+  
+        &:hover {
+          color: white;
+        }
+      }
+    }
+  }

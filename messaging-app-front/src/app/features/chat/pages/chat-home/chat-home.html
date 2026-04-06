@@ -1,0 +1,177 @@
+<main class="home-chat" [class.mobile-chat-open]="selectedChat">
+    <aside class="aside-select" aria-label="icons barre gauche">
+        <div class="aside-top">
+            <div class="icon-box" [class.active]="activeIcon ==='chat'" (click)="setActiveIcon('chat')">
+                <lucide-angular [img]="icons.MessageCircle"></lucide-angular>
+            </div>
+            <div class="icon-box" [class.active]="activeIcon ==='phone'" (click)="setActiveIcon('phone')">
+                <lucide-angular [img]="icons.Phone"></lucide-angular>
+            </div>
+            <div class="icon-box" [class.active]="activeIcon ==='user'" (click)="setActiveIcon('user')">
+                <lucide-angular [img]="icons.User"></lucide-angular>
+            </div>
+        </div>
+  
+        <div class="aside-bottom">
+            <div class="icon-box" [class.active]="activeIcon ==='settings'" (click)="setActiveIcon('settings')">
+                <lucide-angular [img]="icons.Settings"></lucide-angular>
+            </div>
+            <div class="icon-box logout">
+                <lucide-angular [img]="icons.LogOut"></lucide-angular>
+            </div>
+        </div>
+    </aside>
+    
+    <section class="chat-preview">
+        <div class="preview-top">
+            <h2 class="chat-header">Messages</h2>
+            <button class="new-chat-btn">+</button>
+        </div>
+        
+        <div class="search-box">
+            <input type="text" placeholder="Search conversation..." />
+        </div>
+        
+        <div class="chat-list">
+            <div class="chat-item" *ngFor="let chat of chats" (click)="openChat(chat)" >
+                <span class="avatar"></span>
+                <div class="chat-info">
+                    <div class="chat-row">
+                        <strong>{{chat.name}}</strong>
+                        <span class="chat-time"> {{chat.createdAt}} </span>
+                    </div>
+                    <div class="chat-row">
+                        <p>{{chat.message}}</p>
+                        <span class="chat-badge"> {{chat.badge}} </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    @if (selectedChat) {
+        <section class="viewer-chat">
+            <div class="viewer-header">
+                <div class="viewer-user">
+                    <button class="icon-box small" type="button" (click)="closeChat()">
+                        <lucide-angular [img]="icons.ArrowLeft" />
+                    </button>
+                    <span class="avatar big"></span>
+                    <div>
+                        <strong>{{selectedChat.name}}</strong>
+                        <p>Online now</p>
+                    </div>
+                </div>
+                
+                <div class="viewer-actions">
+                    <div class="icon-box small">
+                        <lucide-angular [img]="icons.Phone"></lucide-angular>
+                    </div>
+                    <div class="icon-box small">
+                        <lucide-angular [img]="icons.Video"></lucide-angular>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="messages">
+                <div class="message received">
+                    <p>Hello, are you available later today?</p>
+                    <span>09:18</span>
+                </div>
+                
+                <div class="message sent">
+                    <p>Yes, I should be free after 6 PM.</p>
+                    <span>09:20</span>
+                </div>
+                
+                <div class="message received">
+                    <p>Perfect, I will text you again.</p>
+                    <span>09:21</span>
+                </div>
+                <div class="message received">
+                    <p>Hello, are you available later today?</p>
+                    <span>09:18</span>
+                </div>
+                
+                <div class="message sent">
+                    <p>Yes, I should be free after 6 PM.</p>
+                    <span>09:20</span>
+                </div>
+                
+                <div class="message received">
+                    <p>Perfect, I will text you again.</p>
+                    <span>09:21</span>
+                </div>
+                <div class="message received">
+                    <p>Hello, are you available later today?</p>
+                    <span>09:18</span>
+                </div>
+                
+                <div class="message sent">
+                    <p>Yes, I should be free after 6 PM.</p>
+                    <span>09:20</span>
+                </div>
+                
+                <div class="message received">
+                    <p>Perfect, I will text you again.</p>
+                    <span>09:21</span>
+                </div>
+                <div class="message received">
+                    <p>Hello, are you available later today?</p>
+                    <span>09:18</span>
+                </div>
+                
+                <div class="message sent">
+                    <p>Yes, I should be free after 6 PM.</p>
+                    <span>09:20</span>
+                </div>
+                
+                <div class="message received">
+                    <p>Perfect, I will text you again.</p>
+                    <span>09:21</span>
+                </div>
+            </div>
+            
+            <div class="message-input">
+                <div class="icon-box">
+                    <lucide-angular [img]="icons.Upload"></lucide-angular>
+                </div>
+    
+                <input type="text" placeholder="Type your message..." />
+                
+                <div class="icon-box">
+                    <lucide-angular [img]="icons.Send"></lucide-angular>
+                </div>
+    
+                <div class="icon-box">
+                    <lucide-angular [img]="icons.Mic"></lucide-angular>
+                </div>
+            </div>
+        </section>
+    } 
+
+    @else {
+        <section class="no-chat">
+            <h1>Bienvenue</h1>
+        </section>
+    }
+
+    @if (!selectedChat) {
+        <aside class="aside-select-bottom" aria-label="bottom tabs">
+            <div class="aside-top">
+                <button class="icon-box" [class.active]="activeIcon ==='chat'" (click)="setActiveIcon('chat')">
+                    <lucide-angular [img]="icons.MessageCircle"></lucide-angular>
+                </button>
+                <button class="icon-box" [class.active]="activeIcon ==='phone'" (click)="setActiveIcon('phone')">
+                    <lucide-angular [img]="icons.Phone"></lucide-angular>
+                </button>
+                <button class="icon-box" [class.active]="activeIcon ==='user'" (click)="setActiveIcon('user')">
+                    <lucide-angular [img]="icons.User"></lucide-angular>
+                </button>
+                <button class="icon-box" [class.active]="activeIcon ==='settings'" (click)="setActiveIcon('settings')">
+                    <lucide-angular [img]="icons.Settings"></lucide-angular>
+                </button>
+            </div>
+        </aside>
+    }
+</main>

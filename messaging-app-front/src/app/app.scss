@@ -1,0 +1,45 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--bg-main);
+  color: var(--main);
+}
+
+body {
+  background: #12171b;
+  font-family: Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+app-root {
+  display: block;
+  min-height: 100vh;
+}
+
+:root {
+  /* PRIMARY */
+  --primary: #8b5cf6;       /* violet vibrant */
+  --secondary: #22c55e;
+
+  /* BACKGROUND */
+  --bg-main: #0f0f1a;
+  --bg-card: #1a1a2e;
+  --bg-light: #24243a;
+
+  /* TEXT */
+  --text-main: #f8fafc;
+  --text-secondary: #a1a1aa;
+
+  /* UI */
+  --border: #2e2e4d;
+  --hover: rgba(139, 92, 246, 0.12);
+
+  /* STATES */
+  --success: #22c55e;
+  --danger: #ef4444;
+}

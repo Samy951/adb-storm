@@ -1,0 +1,15 @@
+<form>
+    <!-- COMMON -->
+    <input type="text" placeholder="Username">
+    <input type="password" placeholder="Password">
+  
+    <!-- REGISTER ONLY -->
+    <div *ngIf="mode === 'register'">
+        <input type="password" placeholder="Confirm password">
+    </div>
+  
+    <button type="submit">
+        {{ mode === 'login' ? 'Login' : 'Create account' }}
+    </button>
+  
+</form>
