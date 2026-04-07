@@ -1,17 +1,20 @@
 use dashmap::DashMap;
 use fred::prelude::*;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 /// Sender half to push messages to a connected WebSocket client.
-pub type ClientSender = mpsc::UnboundedSender<String>;
+pub type ClientSender = mpsc::Sender<String>;
 
 /// Shared application state across all handlers and tasks.
 #[derive(Clone)]
 pub struct AppState {
     /// Connected clients: user_id -> sender
     pub clients: Arc<DashMap<Uuid, ClientSender>>,
+    /// Local cache of channel membership: channel_id -> set of user_ids
+    pub channel_members: Arc<DashMap<String, HashSet<Uuid>>>,
     /// Valkey client for Streams (XADD)
     pub valkey: RedisClient,
     /// JWT secret for token validation
@@ -30,22 +33,24 @@ impl AppState {
 
         Self {
             clients: Arc::new(DashMap::new()),
+            channel_members: Arc::new(DashMap::new()),
             valkey,
             jwt_secret: jwt_secret.to_string(),
         }
     }
 
     /// Send a message to a specific connected client.
+    /// Uses try_send (non-blocking): drops the message if the client's buffer is full.
     pub fn send_to_client(&self, user_id: &Uuid, message: &str) {
         if let Some(sender) = self.clients.get(user_id) {
-            let _ = sender.send(message.to_string());
+            let _ = sender.try_send(message.to_string());
         }
     }
 
     /// Broadcast a message to all connected clients.
     pub fn broadcast(&self, message: &str) {
         for entry in self.clients.iter() {
-            let _ = entry.value().send(message.to_string());
+            let _ = entry.value().try_send(message.to_string());
         }
     }
 
@@ -54,6 +59,50 @@ impl AppState {
         for uid in user_ids {
             self.send_to_client(uid, message);
         }
+    }
+
+    /// Get channel members from local cache, falling back to Valkey SMEMBERS.
+    pub async fn get_channel_members(&self, channel_id: &str) -> Vec<Uuid> {
+        // Check local cache first
+        if let Some(members) = self.channel_members.get(channel_id) {
+            return members.iter().copied().collect();
+        }
+
+        // Cache miss: load from Valkey
+        let key = format!("channel:{}:members", channel_id);
+        let members: Vec<String> = match self.valkey.smembers(&key).await {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::error!(%channel_id, "Failed to load channel members from Valkey: {}", e);
+                return Vec::new();
+            }
+        };
+
+        let uuids: HashSet<Uuid> = members
+            .iter()
+            .filter_map(|s| s.parse::<Uuid>().ok())
+            .collect();
+
+        let result: Vec<Uuid> = uuids.iter().copied().collect();
+        self.channel_members.insert(channel_id.to_string(), uuids);
+        result
+    }
+
+    /// Invalidate the local cache for a specific channel.
+    pub fn invalidate_channel_cache(&self, channel_id: &str) {
+        self.channel_members.remove(channel_id);
+    }
+
+    /// Check if a user is a member of a channel (cache-aware).
+    pub async fn is_channel_member(&self, channel_id: &str, user_id: &Uuid) -> bool {
+        // Check local cache first
+        if let Some(members) = self.channel_members.get(channel_id) {
+            return members.contains(user_id);
+        }
+
+        // Cache miss: load from Valkey, then check
+        let members = self.get_channel_members(channel_id).await;
+        members.contains(user_id)
     }
 }
 
@@ -72,6 +121,7 @@ mod tests {
         let valkey = Builder::from_config(config).build().unwrap();
         AppState {
             clients: Arc::new(DashMap::new()),
+            channel_members: Arc::new(DashMap::new()),
             valkey,
             jwt_secret: "test-secret".to_string(),
         }
@@ -89,7 +139,7 @@ mod tests {
     fn send_to_client_delivers_message() {
         let state = test_state();
         let user_id = Uuid::new_v4();
-        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        let (tx, mut rx) = mpsc::channel::<String>(256);
 
         state.clients.insert(user_id, tx);
         state.send_to_client(&user_id, "test message");
@@ -106,9 +156,9 @@ mod tests {
         let uid2 = Uuid::new_v4();
         let uid3 = Uuid::new_v4();
 
-        let (tx1, mut rx1) = mpsc::unbounded_channel::<String>();
-        let (tx2, mut rx2) = mpsc::unbounded_channel::<String>();
-        let (tx3, mut rx3) = mpsc::unbounded_channel::<String>();
+        let (tx1, mut rx1) = mpsc::channel::<String>(256);
+        let (tx2, mut rx2) = mpsc::channel::<String>(256);
+        let (tx3, mut rx3) = mpsc::channel::<String>(256);
 
         state.clients.insert(uid1, tx1);
         state.clients.insert(uid2, tx2);
@@ -129,9 +179,9 @@ mod tests {
         let uid2 = Uuid::new_v4();
         let uid3 = Uuid::new_v4();
 
-        let (tx1, mut rx1) = mpsc::unbounded_channel::<String>();
-        let (tx2, mut rx2) = mpsc::unbounded_channel::<String>();
-        let (tx3, mut rx3) = mpsc::unbounded_channel::<String>();
+        let (tx1, mut rx1) = mpsc::channel::<String>(256);
+        let (tx2, mut rx2) = mpsc::channel::<String>(256);
+        let (tx3, mut rx3) = mpsc::channel::<String>(256);
 
         state.clients.insert(uid1, tx1);
         state.clients.insert(uid2, tx2);
@@ -163,12 +213,89 @@ mod tests {
     fn send_to_client_with_dropped_receiver_does_not_panic() {
         let state = test_state();
         let user_id = Uuid::new_v4();
-        let (tx, rx) = mpsc::unbounded_channel::<String>();
+        let (tx, rx) = mpsc::channel::<String>(256);
 
         state.clients.insert(user_id, tx);
         drop(rx); // simulate disconnected client
 
         // Should not panic even though receiver is gone
         state.send_to_client(&user_id, "message after disconnect");
+    }
+
+    #[test]
+    fn invalidate_channel_cache_removes_entry() {
+        let state = test_state();
+        let channel_id = "test-channel-1";
+        let uid = Uuid::new_v4();
+
+        let mut members = HashSet::new();
+        members.insert(uid);
+        state
+            .channel_members
+            .insert(channel_id.to_string(), members);
+
+        assert!(state.channel_members.contains_key(channel_id));
+        state.invalidate_channel_cache(channel_id);
+        assert!(!state.channel_members.contains_key(channel_id));
+    }
+
+    #[test]
+    fn invalidate_nonexistent_channel_does_not_panic() {
+        let state = test_state();
+        state.invalidate_channel_cache("nonexistent");
+    }
+
+    #[test]
+    fn channel_members_cache_populated_manually() {
+        let state = test_state();
+        let channel_id = "chan-123";
+        let uid1 = Uuid::new_v4();
+        let uid2 = Uuid::new_v4();
+
+        let mut members = HashSet::new();
+        members.insert(uid1);
+        members.insert(uid2);
+        state
+            .channel_members
+            .insert(channel_id.to_string(), members);
+
+        let cached = state.channel_members.get(channel_id).unwrap();
+        assert!(cached.contains(&uid1));
+        assert!(cached.contains(&uid2));
+        assert_eq!(cached.len(), 2);
+    }
+
+    #[test]
+    fn broadcast_to_channel_members_only() {
+        let state = test_state();
+        let channel_id = "chan-456";
+
+        let uid1 = Uuid::new_v4();
+        let uid2 = Uuid::new_v4();
+        let uid3 = Uuid::new_v4();
+
+        let (tx1, mut rx1) = mpsc::channel::<String>(256);
+        let (tx2, mut rx2) = mpsc::channel::<String>(256);
+        let (tx3, mut rx3) = mpsc::channel::<String>(256);
+
+        state.clients.insert(uid1, tx1);
+        state.clients.insert(uid2, tx2);
+        state.clients.insert(uid3, tx3);
+
+        // Only uid1 and uid3 are members of the channel
+        let mut members = HashSet::new();
+        members.insert(uid1);
+        members.insert(uid3);
+        state
+            .channel_members
+            .insert(channel_id.to_string(), members);
+
+        let cached = state.channel_members.get(channel_id).unwrap();
+        let member_list: Vec<Uuid> = cached.iter().copied().collect();
+        state.broadcast_to(&member_list, "channel msg");
+
+        assert_eq!(rx1.try_recv().unwrap(), "channel msg");
+        assert!(rx2.try_recv().is_err()); // uid2 not a member
+        assert_eq!(rx3.try_recv().unwrap(), "channel msg");
     }
 }

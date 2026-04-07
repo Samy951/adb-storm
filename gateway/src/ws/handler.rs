@@ -45,8 +45,8 @@ pub async fn ws_upgrade(
 async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
-    // Channel for sending messages to this client
-    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    // Bounded channel: backpressure — drop slow clients instead of OOM
+    let (tx, mut rx) = mpsc::channel::<String>(256);
 
     // Register client
     state.clients.insert(user_id, tx);
@@ -101,12 +101,31 @@ async fn handle_client_message(state: &AppState, user_id: &Uuid, raw: &str) {
             channel_id,
             content,
         } => {
+            let cid = channel_id.to_string();
+
+            // Verify user is a member of the channel before publishing
+            if !state.is_channel_member(&cid, user_id).await {
+                tracing::warn!(%user_id, %channel_id, "Rejected message: user not a channel member");
+                let err = ServerMessage::Error {
+                    message: "You are not a member of this channel".to_string(),
+                };
+                state.send_to_client(user_id, &serde_json::to_string(&err).unwrap());
+                return;
+            }
+
             // Publish to Valkey Streams for processing by message-service
             if let Err(e) = valkey::publish_message(state, user_id, &channel_id, &content).await {
                 tracing::error!("Failed to publish message: {}", e);
             }
         }
         ClientMessage::Typing { channel_id } => {
+            let cid = channel_id.to_string();
+
+            // Only allow typing indicator if user is a channel member
+            if !state.is_channel_member(&cid, user_id).await {
+                return;
+            }
+
             // Publish typing event via Valkey Pub/Sub
             if let Err(e) = valkey::publish_typing(state, user_id, &channel_id).await {
                 tracing::error!("Failed to publish typing: {}", e);

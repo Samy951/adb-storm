@@ -40,6 +40,7 @@ fn test_state() -> AppState {
     let valkey = Builder::from_config(config).build().unwrap();
     AppState {
         clients: Arc::new(DashMap::new()),
+        channel_members: Arc::new(DashMap::new()),
         valkey,
         jwt_secret: TEST_SECRET.to_string(),
     }

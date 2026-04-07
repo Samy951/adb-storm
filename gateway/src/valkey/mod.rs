@@ -83,6 +83,11 @@ pub async fn pubsub_listener(state: AppState) {
         .await
         .expect("Failed to subscribe to typing channels");
 
+    subscriber
+        .subscribe::<&str>("channel_membership_changed")
+        .await
+        .expect("Failed to subscribe to membership changes");
+
     tracing::info!("Pub/Sub listener started");
 
     while let Ok(message) = message_rx.recv().await {
@@ -90,32 +95,47 @@ pub async fn pubsub_listener(state: AppState) {
         let payload = message.value.convert::<String>().unwrap_or_default();
 
         if channel.starts_with("broadcast:") {
-            // Message broadcast: forward to all clients connected to THIS node.
-            // Each gateway node only holds its own WebSocket connections.
-            // Client-side filtering by channel is handled by the frontend.
-            // This avoids a SMEMBERS round-trip to Valkey for every message.
-            state.broadcast(&payload);
+            // Extract channel_id from the pub/sub channel name
+            let channel_id = channel.strip_prefix("broadcast:").unwrap_or_default();
+
+            // Look up channel members from local cache (falls back to Valkey SMEMBERS)
+            let members = state.get_channel_members(channel_id).await;
+            if members.is_empty() {
+                tracing::debug!(%channel_id, "No cached members for channel, skipping broadcast");
+                continue;
+            }
+
+            state.broadcast_to(&members, &payload);
         } else if channel.starts_with("typing:") {
-            // Typing indicator: forward only to online channel members
+            // Typing indicator: forward only to channel members
             if let Ok(typing) = serde_json::from_str::<serde_json::Value>(&payload) {
                 let channel_id = typing["channel_id"].as_str().unwrap_or_default();
                 let user_id_str = typing["user_id"].as_str().unwrap_or_default();
 
-                if let (Ok(cid), Ok(uid)) =
+                if let (Ok(_cid), Ok(uid)) =
                     (channel_id.parse::<Uuid>(), user_id_str.parse::<Uuid>())
                 {
+                    let members = state.get_channel_members(channel_id).await;
                     let msg = serde_json::to_string(&ServerMessage::UserTyping {
-                        channel_id: cid,
+                        channel_id: _cid,
                         user_id: uid,
                     })
                     .unwrap();
 
-                    // Broadcast to all local clients (except the typer)
-                    for entry in state.clients.iter() {
-                        if *entry.key() != uid {
-                            let _ = entry.value().send(msg.clone());
+                    // Send to channel members only (except the typer)
+                    for member_id in &members {
+                        if *member_id != uid {
+                            state.send_to_client(member_id, &msg);
                         }
                     }
+                }
+            }
+        } else if channel == "channel_membership_changed" {
+            // Invalidate the local channel member cache
+            if let Ok(event) = serde_json::from_str::<serde_json::Value>(&payload) {
+                if let Some(channel_id) = event["channel_id"].as_str() {
+                    state.invalidate_channel_cache(channel_id);
+                    tracing::debug!(%channel_id, "Channel membership cache invalidated");
                 }
             }
         }

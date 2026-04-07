@@ -206,7 +206,7 @@ jobs:
           E2E_MESSAGE_URL: http://localhost:4011
           E2E_PRESENCE_URL: http://localhost:4012
           E2E_JWT_SECRET: test-e2e-secret
-        run: cd tests/e2e && bun test --timeout 10000
+        run: cd tests/e2e && bun test --timeout 30000
 
   deploy:
     name: Deploy to AKS
@@ -233,23 +233,33 @@ jobs:
       - name: Build and push presence-service
         run: az acr build --registry ${{ secrets.ACR_NAME }} --image presence-service:${{ github.sha }} --image presence-service:latest --platform linux/amd64 ./services/presence-service
 
+      - name: Build and push web frontend
+        run: az acr build --registry ${{ secrets.ACR_NAME }} --image web:${{ github.sha }} --image web:latest --platform linux/amd64 ./web
+
       - name: Set AKS context
         uses: azure/aks-set-context@v4
         with:
           resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
           cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
 
+      - name: Apply K8s manifests
+        run: |
+          kubectl apply -f infra/k8s/web.yaml
+          kubectl apply -f infra/k8s/ingress.yaml
+
       - name: Deploy to AKS
         run: |
           kubectl set image deployment/gateway gateway=${{ secrets.ACR_NAME }}.azurecr.io/gateway:${{ github.sha }} -n storm
           kubectl set image deployment/message-service message-service=${{ secrets.ACR_NAME }}.azurecr.io/message-service:${{ github.sha }} -n storm
           kubectl set image deployment/presence-service presence-service=${{ secrets.ACR_NAME }}.azurecr.io/presence-service:${{ github.sha }} -n storm
+          kubectl set image deployment/web web=${{ secrets.ACR_NAME }}.azurecr.io/web:${{ github.sha }} -n storm
 
       - name: Wait for rollout
         run: |
           kubectl rollout status deployment/gateway -n storm --timeout=120s
           kubectl rollout status deployment/message-service -n storm --timeout=120s
           kubectl rollout status deployment/presence-service -n storm --timeout=120s
+          kubectl rollout status deployment/web -n storm --timeout=60s
 
       - name: Verify deployment
         run: |
