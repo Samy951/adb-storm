@@ -171,6 +171,52 @@ async function getOnlineUsers(channelId) {
   const data = await res.json();
   return data.online || [];
 }
+async function getChannel(channelId) {
+  const res = await fetch(`${API_BASE}/channels/${channelId}`, { headers: authHeaders() });
+  if (!res.ok)
+    throw new Error(await res.text());
+  return res.json();
+}
+async function deleteChannel(channelId) {
+  const res = await fetch(`${API_BASE}/channels/${channelId}`, {
+    method: "DELETE",
+    headers: authHeaders()
+  });
+  if (!res.ok)
+    throw new Error(await res.text());
+}
+async function leaveChannel(channelId) {
+  const userId = localStorage.getItem("userId") || "";
+  const res = await fetch(`${API_BASE}/channels/${channelId}/members/${userId}`, {
+    method: "DELETE",
+    headers: authHeaders()
+  });
+  if (!res.ok)
+    throw new Error(await res.text());
+}
+async function getMembers(channelId) {
+  const res = await fetch(`${API_BASE}/channels/${channelId}/members`, { headers: authHeaders() });
+  if (!res.ok)
+    return [];
+  const data = await res.json();
+  return data.members || [];
+}
+async function sendHeartbeat(channelId) {
+  const body = {};
+  if (channelId)
+    body.channel_id = channelId;
+  await fetch(`${API_BASE}/presence/heartbeat`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(body)
+  }).catch(() => {});
+}
+async function sendOffline() {
+  await fetch(`${API_BASE}/presence/offline`, {
+    method: "POST",
+    headers: authHeaders()
+  }).catch(() => {});
+}
 
 // ts/pages/login.ts
 function renderLogin(container) {
@@ -349,6 +395,7 @@ function renderSidebar(activeRoute) {
     button.appendChild(label);
     if (item.route === "logout") {
       button.addEventListener("click", () => {
+        sendOffline();
         localStorage.removeItem("token");
         localStorage.removeItem("username");
         localStorage.removeItem("userId");
@@ -448,6 +495,54 @@ function renderChat(container, params) {
   const body = el("div", { className: "app-body" });
   body.appendChild(renderSidebar("chat"));
   const main = el("div", { className: "main-content" });
+  const userId = localStorage.getItem("userId") || "";
+  const toolbar = el("div", { className: "chat-toolbar" });
+  const leaveBtn = btn("Leave", "win-btn win-btn--small", async () => {
+    try {
+      await leaveChannel(channelId);
+      router.navigate("channels");
+    } catch (err) {
+      console.error("Leave failed:", err.message);
+    }
+  });
+  toolbar.appendChild(leaveBtn);
+  const membersBtn = btn("Members", "win-btn win-btn--small", () => {
+    membersPanel.style.display = membersPanel.style.display === "none" ? "flex" : "none";
+    loadMembers();
+  });
+  toolbar.appendChild(membersBtn);
+  const deleteBtn = btn("Delete Channel", "win-btn win-btn--small", async () => {
+    try {
+      await deleteChannel(channelId);
+      router.navigate("channels");
+    } catch (err) {
+      console.error("Delete failed:", err.message);
+    }
+  });
+  deleteBtn.style.display = "none";
+  toolbar.appendChild(deleteBtn);
+  if (channelId) {
+    getChannel(channelId).then((ch) => {
+      if (ch.created_by === userId) {
+        deleteBtn.style.display = "";
+      }
+    }).catch(() => {});
+  }
+  main.appendChild(toolbar);
+  const membersPanel = el("div", { className: "chat-members" });
+  membersPanel.style.display = "none";
+  const loadMembers = async () => {
+    if (!channelId)
+      return;
+    const members = await getMembers(channelId);
+    while (membersPanel.firstChild)
+      membersPanel.removeChild(membersPanel.firstChild);
+    membersPanel.appendChild(text("div", "chat-members__title", `Members (${members.length})`));
+    for (const m of members) {
+      const row = el("div", { className: "chat-members__row" }, text("span", "chat-members__name", m.username || m.user_id.slice(0, 8)), text("span", "chat-members__role", m.role));
+      membersPanel.appendChild(row);
+    }
+  };
   const feed = el("div", { className: "chat-feed" });
   const onlineBar = el("div", { className: "chat-online" });
   onlineBar.textContent = "Loading online users...";
@@ -491,7 +586,10 @@ function renderChat(container, params) {
   sendBtn.addEventListener("click", sendMessage);
   const inputBar = el("div", { className: "chat-input" }, el("div", { className: "chat-input__field" }, msgInput), sendBtn);
   const typingBar = el("div", { className: "chat-typing" });
-  main.appendChild(feed);
+  const chatArea = el("div", { className: "chat-area" });
+  chatArea.appendChild(feed);
+  chatArea.appendChild(membersPanel);
+  main.appendChild(chatArea);
   main.appendChild(typingBar);
   main.appendChild(inputBar);
   body.appendChild(main);
@@ -546,6 +644,12 @@ function renderChat(container, params) {
     loadMessages();
   }
   ws.connect(token);
+  if (channelId)
+    sendHeartbeat(channelId);
+  const heartbeatInterval = setInterval(() => {
+    if (channelId)
+      sendHeartbeat(channelId);
+  }, 30000);
   const refreshOnline = async () => {
     if (!channelId)
       return;
@@ -615,6 +719,8 @@ function renderChat(container, params) {
     typingUsers.forEach((timer) => clearTimeout(timer));
     typingUsers.clear();
     clearInterval(onlineInterval);
+    clearInterval(heartbeatInterval);
+    sendOffline();
   };
 }
 

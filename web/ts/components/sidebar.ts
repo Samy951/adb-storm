@@ -1,4 +1,5 @@
 import { el, text } from '../dom';
+import { sendOffline } from '../api';
 import type { Router } from '../router';
 
 const NAV_ITEMS = [
@@ -38,6 +39,7 @@ export function renderSidebar(activeRoute: string): HTMLElement {
 
     if (item.route === 'logout') {
       button.addEventListener('click', () => {
+        sendOffline();
         localStorage.removeItem('token');
         localStorage.removeItem('username');
         localStorage.removeItem('userId');

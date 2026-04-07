@@ -14,9 +14,10 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
 
 async function main() {
   const db = createDb();
-  const valkey = createValkeyClient();
+  const valkeyStream = createValkeyClient();  // Dedicated to XREADGROUP (blocking)
+  const valkeyRoutes = createValkeyClient();  // Dedicated to HTTP routes (sadd, publish)
 
-  startStreamConsumer(valkey, db);
+  startStreamConsumer(valkeyStream, db);
 
   const app = new Elysia()
     .use(swagger({
@@ -31,7 +32,7 @@ async function main() {
       },
     }))
     .decorate("db", db)
-    .decorate("valkey", valkey)
+    .decorate("valkey", valkeyRoutes)
     .get("/health", () => "OK")
     .use(metricsRoute)
     .use(authRoutes)

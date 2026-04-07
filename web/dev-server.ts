@@ -31,9 +31,9 @@ const server = Bun.serve({
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
 
-    // Proxy API routes to message-service
-    if (url.pathname.startsWith("/auth") || url.pathname.startsWith("/channels")) {
-      const target = `${API_TARGET}${url.pathname}${url.search}`;
+    // Proxy presence routes (must be checked BEFORE /channels catch-all)
+    if (url.pathname.startsWith("/presence") || url.pathname.match(/^\/channels\/[^/]+\/online$/)) {
+      const target = `${PRESENCE_TARGET}${url.pathname}${url.search}`;
       return fetch(target, {
         method: req.method,
         headers: req.headers,
@@ -41,9 +41,9 @@ const server = Bun.serve({
       });
     }
 
-    // Proxy presence routes
-    if (url.pathname.startsWith("/presence")) {
-      const target = `${PRESENCE_TARGET}${url.pathname}${url.search}`;
+    // Proxy API routes to message-service
+    if (url.pathname.startsWith("/auth") || url.pathname.startsWith("/channels")) {
+      const target = `${API_TARGET}${url.pathname}${url.search}`;
       return fetch(target, {
         method: req.method,
         headers: req.headers,

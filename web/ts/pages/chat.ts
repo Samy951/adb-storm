@@ -1,5 +1,6 @@
 import { el, text, input } from '../dom';
-import { getMessages, getOnlineUsers } from '../api';
+import { getMessages, getOnlineUsers, getMembers, getChannel, deleteChannel, leaveChannel, sendHeartbeat, sendOffline } from '../api';
+import { btn } from '../dom';
 import { ws } from '../ws';
 import type { Router } from '../router';
 import { renderSidebar } from '../components/sidebar';
@@ -76,6 +77,67 @@ export function renderChat(container: HTMLElement, params?: Record<string, strin
 
   const main = el('div', { className: 'main-content' });
 
+  // Channel toolbar (Leave, Delete, Members)
+  const userId = localStorage.getItem('userId') || '';
+  const toolbar = el('div', { className: 'chat-toolbar' });
+
+  const leaveBtn = btn('Leave', 'win-btn win-btn--small', async () => {
+    try {
+      await leaveChannel(channelId);
+      router.navigate('channels');
+    } catch (err: any) {
+      console.error('Leave failed:', err.message);
+    }
+  });
+  toolbar.appendChild(leaveBtn);
+
+  const membersBtn = btn('Members', 'win-btn win-btn--small', () => {
+    membersPanel.style.display = membersPanel.style.display === 'none' ? 'flex' : 'none';
+    loadMembers();
+  });
+  toolbar.appendChild(membersBtn);
+
+  // Delete button — shown only if user is creator (checked async)
+  const deleteBtn = btn('Delete Channel', 'win-btn win-btn--small', async () => {
+    try {
+      await deleteChannel(channelId);
+      router.navigate('channels');
+    } catch (err: any) {
+      console.error('Delete failed:', err.message);
+    }
+  });
+  deleteBtn.style.display = 'none';
+  toolbar.appendChild(deleteBtn);
+
+  // Check if user is the creator
+  if (channelId) {
+    getChannel(channelId).then(ch => {
+      if (ch.created_by === userId) {
+        deleteBtn.style.display = '';
+      }
+    }).catch(() => {});
+  }
+
+  main.appendChild(toolbar);
+
+  // Members panel (right side, toggleable)
+  const membersPanel = el('div', { className: 'chat-members' });
+  membersPanel.style.display = 'none';
+
+  const loadMembers = async () => {
+    if (!channelId) return;
+    const members = await getMembers(channelId);
+    while (membersPanel.firstChild) membersPanel.removeChild(membersPanel.firstChild);
+    membersPanel.appendChild(text('div', 'chat-members__title', `Members (${members.length})`));
+    for (const m of members) {
+      const row = el('div', { className: 'chat-members__row' },
+        text('span', 'chat-members__name', m.username || m.user_id.slice(0, 8)),
+        text('span', 'chat-members__role', m.role)
+      );
+      membersPanel.appendChild(row);
+    }
+  };
+
   // Chat feed
   const feed = el('div', { className: 'chat-feed' });
 
@@ -135,7 +197,12 @@ export function renderChat(container: HTMLElement, params?: Record<string, strin
   // Typing indicator bar
   const typingBar = el('div', { className: 'chat-typing' });
 
-  main.appendChild(feed);
+  // Chat content area (feed + members side by side)
+  const chatArea = el('div', { className: 'chat-area' });
+  chatArea.appendChild(feed);
+  chatArea.appendChild(membersPanel);
+
+  main.appendChild(chatArea);
   main.appendChild(typingBar);
   main.appendChild(inputBar);
   body.appendChild(main);
@@ -200,6 +267,12 @@ export function renderChat(container: HTMLElement, params?: Record<string, strin
 
   // Connect WebSocket (no-op if already connected)
   ws.connect(token);
+
+  // Presence: heartbeat on enter + every 30s
+  if (channelId) sendHeartbeat(channelId);
+  const heartbeatInterval = setInterval(() => {
+    if (channelId) sendHeartbeat(channelId);
+  }, 30000);
 
   // Poll online users
   const refreshOnline = async () => {
@@ -278,5 +351,7 @@ export function renderChat(container: HTMLElement, params?: Record<string, strin
     typingUsers.forEach(timer => clearTimeout(timer));
     typingUsers.clear();
     clearInterval(onlineInterval);
+    clearInterval(heartbeatInterval);
+    sendOffline();
   };
 }

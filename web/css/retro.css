@@ -705,6 +705,59 @@ html, body {
 }
 .app-footer a:hover { text-decoration: underline; }
 
+/* === CHAT TOOLBAR === */
+.chat-toolbar {
+  background: var(--gray);
+  padding: 4px 8px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  border-bottom: 1px solid var(--gray-dark);
+  flex-shrink: 0;
+}
+
+/* === CHAT AREA (feed + members side by side) === */
+.chat-area {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* === CHAT MEMBERS PANEL === */
+.chat-members {
+  width: 180px;
+  background: var(--gray);
+  border-left: 2px solid var(--white);
+  box-shadow: -1px 0 0 var(--gray-dark);
+  padding: 8px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-members__title {
+  font-weight: bold;
+  font-size: 11px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--gray-dark);
+  margin-bottom: 4px;
+}
+.chat-members__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 4px;
+  font-size: 11px;
+}
+.chat-members__name {
+  font-weight: bold;
+}
+.chat-members__role {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
 /* === CHAT ONLINE BAR === */
 .chat-online {
   padding: 4px 8px;
