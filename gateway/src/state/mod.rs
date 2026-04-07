@@ -230,7 +230,9 @@ mod tests {
 
         let mut members = HashSet::new();
         members.insert(uid);
-        state.channel_members.insert(channel_id.to_string(), members);
+        state
+            .channel_members
+            .insert(channel_id.to_string(), members);
 
         assert!(state.channel_members.contains_key(channel_id));
         state.invalidate_channel_cache(channel_id);
@@ -253,7 +255,9 @@ mod tests {
         let mut members = HashSet::new();
         members.insert(uid1);
         members.insert(uid2);
-        state.channel_members.insert(channel_id.to_string(), members);
+        state
+            .channel_members
+            .insert(channel_id.to_string(), members);
 
         let cached = state.channel_members.get(channel_id).unwrap();
         assert!(cached.contains(&uid1));
@@ -282,7 +286,9 @@ mod tests {
         let mut members = HashSet::new();
         members.insert(uid1);
         members.insert(uid3);
-        state.channel_members.insert(channel_id.to_string(), members);
+        state
+            .channel_members
+            .insert(channel_id.to_string(), members);
 
         let cached = state.channel_members.get(channel_id).unwrap();
         let member_list: Vec<Uuid> = cached.iter().copied().collect();

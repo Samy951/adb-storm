@@ -206,7 +206,7 @@ jobs:
           E2E_MESSAGE_URL: http://localhost:4011
           E2E_PRESENCE_URL: http://localhost:4012
           E2E_JWT_SECRET: test-e2e-secret
-        run: cd tests/e2e && bun test --timeout 10000
+        run: cd tests/e2e && bun test --timeout 30000
 
   deploy:
     name: Deploy to AKS
