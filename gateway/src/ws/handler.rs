@@ -45,8 +45,8 @@ pub async fn ws_upgrade(
 async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
-    // Channel for sending messages to this client
-    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    // Bounded channel: backpressure — drop slow clients instead of OOM
+    let (tx, mut rx) = mpsc::channel::<String>(256);
 
     // Register client
     state.clients.insert(user_id, tx);

@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 /// Sender half to push messages to a connected WebSocket client.
-pub type ClientSender = mpsc::UnboundedSender<String>;
+pub type ClientSender = mpsc::Sender<String>;
 
 /// Shared application state across all handlers and tasks.
 #[derive(Clone)]
@@ -40,16 +40,17 @@ impl AppState {
     }
 
     /// Send a message to a specific connected client.
+    /// Uses try_send (non-blocking): drops the message if the client's buffer is full.
     pub fn send_to_client(&self, user_id: &Uuid, message: &str) {
         if let Some(sender) = self.clients.get(user_id) {
-            let _ = sender.send(message.to_string());
+            let _ = sender.try_send(message.to_string());
         }
     }
 
     /// Broadcast a message to all connected clients.
     pub fn broadcast(&self, message: &str) {
         for entry in self.clients.iter() {
-            let _ = entry.value().send(message.to_string());
+            let _ = entry.value().try_send(message.to_string());
         }
     }
 
@@ -138,7 +139,7 @@ mod tests {
     fn send_to_client_delivers_message() {
         let state = test_state();
         let user_id = Uuid::new_v4();
-        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        let (tx, mut rx) = mpsc::channel::<String>(256);
 
         state.clients.insert(user_id, tx);
         state.send_to_client(&user_id, "test message");
@@ -155,9 +156,9 @@ mod tests {
         let uid2 = Uuid::new_v4();
         let uid3 = Uuid::new_v4();
 
-        let (tx1, mut rx1) = mpsc::unbounded_channel::<String>();
-        let (tx2, mut rx2) = mpsc::unbounded_channel::<String>();
-        let (tx3, mut rx3) = mpsc::unbounded_channel::<String>();
+        let (tx1, mut rx1) = mpsc::channel::<String>(256);
+        let (tx2, mut rx2) = mpsc::channel::<String>(256);
+        let (tx3, mut rx3) = mpsc::channel::<String>(256);
 
         state.clients.insert(uid1, tx1);
         state.clients.insert(uid2, tx2);
@@ -178,9 +179,9 @@ mod tests {
         let uid2 = Uuid::new_v4();
         let uid3 = Uuid::new_v4();
 
-        let (tx1, mut rx1) = mpsc::unbounded_channel::<String>();
-        let (tx2, mut rx2) = mpsc::unbounded_channel::<String>();
-        let (tx3, mut rx3) = mpsc::unbounded_channel::<String>();
+        let (tx1, mut rx1) = mpsc::channel::<String>(256);
+        let (tx2, mut rx2) = mpsc::channel::<String>(256);
+        let (tx3, mut rx3) = mpsc::channel::<String>(256);
 
         state.clients.insert(uid1, tx1);
         state.clients.insert(uid2, tx2);
@@ -212,7 +213,7 @@ mod tests {
     fn send_to_client_with_dropped_receiver_does_not_panic() {
         let state = test_state();
         let user_id = Uuid::new_v4();
-        let (tx, rx) = mpsc::unbounded_channel::<String>();
+        let (tx, rx) = mpsc::channel::<String>(256);
 
         state.clients.insert(user_id, tx);
         drop(rx); // simulate disconnected client
@@ -269,9 +270,9 @@ mod tests {
         let uid2 = Uuid::new_v4();
         let uid3 = Uuid::new_v4();
 
-        let (tx1, mut rx1) = mpsc::unbounded_channel::<String>();
-        let (tx2, mut rx2) = mpsc::unbounded_channel::<String>();
-        let (tx3, mut rx3) = mpsc::unbounded_channel::<String>();
+        let (tx1, mut rx1) = mpsc::channel::<String>(256);
+        let (tx2, mut rx2) = mpsc::channel::<String>(256);
+        let (tx3, mut rx3) = mpsc::channel::<String>(256);
 
         state.clients.insert(uid1, tx1);
         state.clients.insert(uid2, tx2);
