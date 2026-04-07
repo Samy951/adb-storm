@@ -128,4 +128,93 @@ describe("auth routes", () => {
 
     expect(res.status).toBe(422);
   });
+
+  it("POST /auth/login — returns user and token with valid credentials", async () => {
+    const { db, users } = createMockDb();
+    const passwordHash = await Bun.password.hash("password123", {
+      algorithm: "bcrypt",
+      cost: 10,
+    });
+    users.push({
+      id: "user-1",
+      username: "alice",
+      display_name: "Alice",
+      password_hash: passwordHash,
+      created_at: "2025-01-01T00:00:00.000Z",
+    });
+    const app = createApp(db);
+
+    const res = await app.handle(
+      new Request("http://localhost/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: "alice",
+          password: "password123",
+        }),
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.user.id).toBe("user-1");
+    expect(body.user.username).toBe("alice");
+    expect(body.user.display_name).toBe("Alice");
+    expect(body.token).toBeDefined();
+
+    const decoded = jwt.verify(body.token, AUTH_SECRET) as any;
+    expect(decoded.sub).toBe("user-1");
+    expect(decoded.username).toBe("alice");
+  });
+
+  it("POST /auth/login — returns 401 with wrong password", async () => {
+    const { db, users } = createMockDb();
+    const passwordHash = await Bun.password.hash("correctpassword", {
+      algorithm: "bcrypt",
+      cost: 10,
+    });
+    users.push({
+      id: "user-1",
+      username: "alice",
+      display_name: "Alice",
+      password_hash: passwordHash,
+      created_at: "2025-01-01T00:00:00.000Z",
+    });
+    const app = createApp(db);
+
+    const res = await app.handle(
+      new Request("http://localhost/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: "alice",
+          password: "wrongpassword",
+        }),
+      })
+    );
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("Invalid credentials");
+  });
+
+  it("POST /auth/login — returns 401 for non-existent username", async () => {
+    const { db } = createMockDb();
+    const app = createApp(db);
+
+    const res = await app.handle(
+      new Request("http://localhost/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: "ghost",
+          password: "password123",
+        }),
+      })
+    );
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("Invalid credentials");
+  });
 });

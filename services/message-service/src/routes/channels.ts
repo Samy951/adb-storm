@@ -44,7 +44,7 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
   // Create a channel
   .post(
     "/",
-    async ({ body, db, userId }) => {
+    async ({ body, db, userId, valkey }) => {
       const [channel] = await db`
         INSERT INTO channels (name, description, is_private, created_by)
         VALUES (${body.name}, ${body.description || ""}, ${body.is_private || false}, ${userId})
@@ -55,6 +55,8 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
         INSERT INTO channel_members (channel_id, user_id, role)
         VALUES (${channel.id}, ${userId}, 'admin')
       `;
+      // Sync membership to Valkey cache
+      await valkey.sadd(`channel:${channel.id}:members`, userId);
       return channel;
     },
     {
@@ -70,7 +72,7 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
   // Delete a channel (only creator)
   .delete(
     "/:id",
-    async ({ params, db, userId, set }) => {
+    async ({ params, db, userId, valkey, set }) => {
       const [channel] = await db`
         SELECT created_by FROM channels WHERE id = ${params.id}
       `;
@@ -83,6 +85,9 @@ export const channelRoutes = new Elysia({ prefix: "/channels" })
         return { error: "Only the channel creator can delete it" };
       }
       await db`DELETE FROM channels WHERE id = ${params.id}`;
+      // Clean up Valkey membership cache and notify gateways
+      await valkey.del(`channel:${params.id}:members`);
+      await valkey.publish("channel_membership_changed", JSON.stringify({ channel_id: params.id }));
       return { deleted: true };
     },
     { params: t.Object({ id: t.String() }), auth: true }

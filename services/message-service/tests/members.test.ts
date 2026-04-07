@@ -10,6 +10,7 @@ const THIRD_USER_ID = "770e8400-e29b-41d4-a716-446655440002";
 
 interface Channel {
   id: string;
+  is_private?: boolean;
 }
 
 interface Member {
@@ -24,6 +25,13 @@ interface Member {
 function createMockDb(channels: Channel[] = [], members: Member[] = []) {
   const db = (strings: TemplateStringsArray, ...values: any[]) => {
     const query = strings.join("?");
+
+    // Check channel with is_private (join route): SELECT id, is_private FROM channels WHERE id = ?
+    if (query.includes("is_private") && query.includes("FROM channels")) {
+      const id = values[0];
+      const found = channels.find((c) => c.id === id);
+      return found ? [{ id: found.id, is_private: found.is_private ?? false }] : [];
+    }
 
     // Check channel exists: SELECT id FROM channels WHERE id = ?
     if (query.includes("SELECT id FROM channels")) {
@@ -58,7 +66,8 @@ function createMockDb(channels: Channel[] = [], members: Member[] = []) {
     if (query.includes("INSERT INTO channel_members")) {
       const channelId = values[0];
       const userId = values[1];
-      const role = values[2];
+      // role may be in values[2] (admin add) or hardcoded in the SQL template (self-join)
+      const role = values[2] || "member";
       const exists = members.find((m) => m.channel_id === channelId && m.user_id === userId);
       if (!exists) {
         members.push({
@@ -223,6 +232,82 @@ describe("member routes", () => {
       );
 
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe("POST /channels/:id/join", () => {
+    it("allows self-join on a public channel", async () => {
+      const channels: Channel[] = [{ id: "ch-1", is_private: false }];
+      const members: Member[] = [];
+      const app = createApp(createMockDb(channels, members));
+
+      const res = await app.handle(
+        new Request("http://localhost/channels/ch-1/join", {
+          method: "POST",
+          headers: authHeaders(),
+        })
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(members).toHaveLength(1);
+      expect(members[0].user_id).toBe(USER_ID);
+      expect(members[0].role).toBe("member");
+    });
+
+    it("returns 403 when trying to self-join a private channel", async () => {
+      const channels: Channel[] = [{ id: "ch-priv", is_private: true }];
+      const members: Member[] = [];
+      const app = createApp(createMockDb(channels, members));
+
+      const res = await app.handle(
+        new Request("http://localhost/channels/ch-priv/join", {
+          method: "POST",
+          headers: authHeaders(),
+        })
+      );
+
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toBe("Cannot self-join a private channel");
+      expect(members).toHaveLength(0);
+    });
+
+    it("returns 404 for non-existent channel", async () => {
+      const app = createApp(createMockDb([], []));
+
+      const res = await app.handle(
+        new Request("http://localhost/channels/nonexistent/join", {
+          method: "POST",
+          headers: authHeaders(),
+        })
+      );
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe("Channel not found");
+    });
+
+    it("handles self-join when already a member (idempotent)", async () => {
+      const channels: Channel[] = [{ id: "ch-1", is_private: false }];
+      const members: Member[] = [
+        { channel_id: "ch-1", user_id: USER_ID, role: "member", joined_at: "2025-01-01", username: "alice", display_name: "Alice" },
+      ];
+      const app = createApp(createMockDb(channels, members));
+
+      const res = await app.handle(
+        new Request("http://localhost/channels/ch-1/join", {
+          method: "POST",
+          headers: authHeaders(),
+        })
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      // ON CONFLICT DO NOTHING: member count stays the same
+      expect(members).toHaveLength(1);
     });
   });
 
