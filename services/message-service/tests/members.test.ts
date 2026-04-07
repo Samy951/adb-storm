@@ -97,9 +97,12 @@ function createMockDb(channels: Channel[] = [], members: Member[] = []) {
   return db;
 }
 
+const mockValkey = { sadd: async () => {}, srem: async () => {}, del: async () => {}, publish: async () => {} };
+
 function createApp(db: any) {
   return new Elysia()
     .decorate("db", db)
+    .decorate("valkey", mockValkey)
     .use(authMiddleware(TEST_JWT_SECRET))
     .use(memberRoutes);
 }
